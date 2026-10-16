@@ -1313,6 +1313,9 @@ def live_session_id(name):
     return live[0]["id"] if live else None
 
 
+CHAT_WAIT = int(os.environ.get("ABACUS_CHAT_WAIT", "90"))
+
+
 def cmd_chat(a):
     job = live_session_id("agent:concierge")
     if not job:
@@ -1320,13 +1323,19 @@ def cmd_chat(a):
         if p.returncode != 0:
             die((p.stderr or p.stdout).strip())
         say("started agent:concierge")
-        for _ in range(20):
+        # Claude Code can take most of a minute to register a background session (for example while it refreshes
+        # its sign-in), so wait well past the usual few seconds before giving up.
+        for i in range(CHAT_WAIT):
             job = live_session_id("agent:concierge")
             if job:
                 break
+            if i == 5:
+                say("waiting for agent:concierge to appear in Agent View (this can take up to a minute)...")
             time.sleep(1)
         if not job:
-            die("agent:concierge started but doesn't show in Agent View yet; try `abacus chat` again in a moment")
+            die(f"agent:concierge started but hasn't appeared in Agent View after {CHAT_WAIT}s; it may still be "
+                "starting. Run `abacus chat` again shortly, or pick it in `claude agents`")
+    sys.stdout.flush()  # exec replaces this process; unflushed messages would be lost when output is piped
     os.execvp("claude", ["claude", "attach", job])
 
 

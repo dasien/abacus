@@ -290,6 +290,46 @@ class ChatTest(unittest.TestCase):
         self.assertEqual(p.stdout.strip(), "CLAUDE attach live1")
 
 
+class ChatSlowStartTest(unittest.TestCase):
+    """Claude Code can take most of a minute to register a new background session; abacus chat waits for it."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        t = Path(self.tmp.name)
+        self.bin = t / "bin"
+        self.bin.mkdir()
+        live = json.dumps([{"id": "late1", "name": "agent:concierge", "pid": 42, "startedAt": 3}])
+        # Agent View lists the concierge only from the 8th poll on (the first poll is before the start).
+        (self.bin / "claude").write_text(
+            f"#!/bin/sh\nif [ \"$1\" = agents ]; then echo x >> {t}/polls\n"
+            f"  if [ $(wc -l < {t}/polls) -ge 8 ]; then echo '{live}'; else echo '[]'; fi\n"
+            "else echo \"CLAUDE $*\"; fi\n")
+        (self.bin / "abacus-session").write_text("#!/bin/sh\nexit 0\n")
+        for f in ("claude", "abacus-session"):
+            (self.bin / f).chmod(0o755)
+        self.env = dict(os.environ, HOME=str(t), ABACUS_HOME=str(t / ".abacus"),
+                        PATH=f"{self.bin}{os.pathsep}{os.environ['PATH']}")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def chat(self, **env):
+        return subprocess.run([sys.executable, str(CLI), "chat"], env=dict(self.env, **env),
+                              capture_output=True, text=True)
+
+    def test_keeps_waiting_says_so_and_attaches(self):
+        p = self.chat()
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("waiting for agent:concierge to appear in Agent View", p.stdout)
+        self.assertTrue(p.stdout.strip().endswith("CLAUDE attach late1"), p.stdout)
+
+    def test_gives_up_with_a_way_forward(self):
+        p = self.chat(ABACUS_CHAT_WAIT="2")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("hasn't appeared in Agent View after 2s", p.stderr)
+        self.assertIn("claude agents", p.stderr)
+
+
 class RenameTest(unittest.TestCase):
     """0.4.0 renamed abacus-orchestrator to abacus-agents: the installer explains a checkout under the old name."""
 

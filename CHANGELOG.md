@@ -20,6 +20,9 @@ operator decides it. See [docs/INSTALL.md](docs/INSTALL.md#versions).
     entry. The concierge's allowlist accepts `agent:orchestrator-*` session names. Install and update add new
     settings (like `"lanes"`) to an existing fleet without changing yours.
 - Fix: `abacus status` no longer counts a decisions page reading `_None._` as one decision that needs you.
+- Fix: `abacus chat` waits up to 90 seconds (was 20) for a newly started concierge to appear in Agent View, says
+  it's waiting, and no longer loses its messages when output is piped. Claude Code sometimes takes most of a
+  minute to register a background session.
 - Not yet: more than one worker per repository.
 
 ## 0.9.0 (2026-10-16)
