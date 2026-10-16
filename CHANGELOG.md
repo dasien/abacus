@@ -23,6 +23,10 @@ operator decides it. See [docs/INSTALL.md](docs/INSTALL.md#versions).
 - Fix: `abacus chat` waits up to 90 seconds (was 20) for a newly started concierge to appear in Agent View, says
   it's waiting, and no longer loses its messages when output is piped. Claude Code sometimes takes most of a
   minute to register a background session.
+- Fix: a failed `claude agents --json` is no longer read as "nothing running". That reading is how one `abacus chat`
+  started a second concierge. The launcher now refuses with `AGENT_VIEW` and the error; `abacus chat` shows it
+  instead of starting another. Every failure is logged in `~/.abacus/state/agent-view.log`; `ABACUS_DEBUG=1` prints
+  each lookup.
 - Not yet: more than one worker per repository.
 
 ## 0.9.0 (2026-10-16)

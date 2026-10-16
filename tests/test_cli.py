@@ -330,6 +330,28 @@ class ChatSlowStartTest(unittest.TestCase):
         self.assertIn("claude agents", p.stderr)
 
 
+class ChatAgentViewErrorTest(unittest.TestCase):
+    """If `claude agents --json` fails, abacus chat says why and starts nothing (a guess would start a second one)."""
+
+    def test_reports_the_error_logs_it_and_starts_nothing(self):
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t)
+            (t / "bin").mkdir()
+            (t / "bin" / "claude").write_text("#!/bin/sh\necho 'API Error: 401 token revoked' >&2\nexit 1\n")
+            (t / "bin" / "abacus-session").write_text(f"#!/bin/sh\ntouch {t}/started\n")
+            for f in ("claude", "abacus-session"):
+                (t / "bin" / f).chmod(0o755)
+            env = dict(os.environ, HOME=str(t), ABACUS_HOME=str(t / ".abacus"), ABACUS_DEBUG="1",
+                       PATH=f"{t / 'bin'}{os.pathsep}{os.environ['PATH']}")
+            p = subprocess.run([sys.executable, str(CLI), "chat"], env=env, capture_output=True, text=True)
+            self.assertNotEqual(p.returncode, 0)
+            self.assertIn("couldn't read Agent View", p.stderr)
+            self.assertIn("401 token revoked", p.stderr)
+            self.assertIn("[abacus debug]", p.stderr)
+            self.assertFalse((t / "started").exists())
+            self.assertIn("FAILED: exit 1: API Error: 401", (t / ".abacus" / "state" / "agent-view.log").read_text())
+
+
 class RenameTest(unittest.TestCase):
     """0.4.0 renamed abacus-orchestrator to abacus-agents: the installer explains a checkout under the old name."""
 

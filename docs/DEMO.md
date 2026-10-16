@@ -136,7 +136,9 @@ The orchestrator can record your words as a ruling only because they appear in a
 you launched it with. The human-only guard refuses anything it would put in your mouth.
 
 The launcher refuses by named code if anything is off: `ROLE`, `ATTENDED`, `BUSY`, `UNSAVED`, `AUTHORITY`, `MODEL`,
-`TRUST`, `OPERATOR`, or `LAUNCH` if `claude --bg` itself fails. The orchestrator runs from `~/.abacus/agents/orchestrator` with no Edit or Write tools, and
+`TRUST`, `OPERATOR`, `LAUNCH` if `claude --bg` itself fails, or `AGENT_VIEW` if `claude agents --json` fails
+(so it can't tell whether the session is already running). Agent View failures are logged in
+`~/.abacus/state/agent-view.log`; `ABACUS_DEBUG=1` prints every lookup. The orchestrator runs from `~/.abacus/agents/orchestrator` with no Edit or Write tools, and
 starts with `/recover`.
 
 ## 4. What a good run looks like

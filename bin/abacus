@@ -1299,13 +1299,52 @@ def cmd_demo_status(a):
 
 # ------------------------------------------------------------------ operator conveniences
 
+class AgentViewError(Exception):
+    pass
+
+
+def agent_view_log(line, failed):
+    """Failures always go to state/agent-view.log; with ABACUS_DEBUG=1 every lookup is also printed and logged."""
+    debug = bool(os.environ.get("ABACUS_DEBUG"))
+    if not (failed or debug):
+        return
+    entry = f"{time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())} pid={os.getpid()} abacus {line}"
+    if debug:
+        print(f"[abacus debug] {entry}", file=sys.stderr, flush=True)
+    try:
+        (HOME / "state").mkdir(parents=True, exist_ok=True)
+        with open(HOME / "state" / "agent-view.log", "a") as f:
+            f.write(entry + "\n")
+    except OSError:
+        pass
+
+
+def agent_view():
+    """Agent View's session list, or AgentViewError saying exactly what went wrong (never a silent empty list)."""
+    try:
+        p = subprocess.run(["claude", "agents", "--json"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        why = f"{type(e).__name__}: {e}"
+    else:
+        if p.returncode != 0:
+            why = f"exit {p.returncode}: {(p.stderr or p.stdout).strip()[:500]}"
+        else:
+            try:
+                sessions = json.loads(p.stdout or "[]")
+            except ValueError as e:
+                why = f"unreadable output ({e}): {p.stdout[:300]!r} stderr: {p.stderr.strip()[:300]!r}"
+            else:
+                running = sorted(str(x.get("name")) for x in sessions if x.get("pid"))
+                agent_view_log(f"claude agents --json: {len(sessions)} listed, running: {running}", failed=False)
+                return sessions
+    agent_view_log(f"claude agents --json FAILED: {why}", failed=True)
+    raise AgentViewError(why)
+
+
 def live_session_id(name):
     """The job id of the running session with exactly this name. Attaching by name is ambiguous: Agent View keeps
-    every stopped session's record, and other sessions' task text can mention the name."""
-    try:
-        sessions = json.loads(run(["claude", "agents", "--json"], check=False).stdout or "[]")
-    except ValueError:
-        return None
+    every stopped session's record, and other sessions' task text can mention the name. Raises AgentViewError."""
+    sessions = agent_view()
     live = [s for s in sessions if s.get("name") == name and s.get("pid") and s.get("id")]
     live.sort(key=lambda s: s.get("startedAt") or 0, reverse=True)
     if len(live) > 1:
@@ -1317,7 +1356,12 @@ CHAT_WAIT = int(os.environ.get("ABACUS_CHAT_WAIT", "90"))
 
 
 def cmd_chat(a):
-    job = live_session_id("agent:concierge")
+    log = HOME / "state" / "agent-view.log"
+    try:
+        job = live_session_id("agent:concierge")
+    except AgentViewError as e:  # guessing "not running" here would start a second concierge
+        die(f"couldn't read Agent View (`claude agents --json`), so can't tell whether agent:concierge is running: "
+            f"{e}\n(logged in {log}; rerun with ABACUS_DEBUG=1 to see every lookup)")
     if not job:
         p = run(["abacus-session", "start", "agent:concierge"], check=False)
         if p.returncode != 0:
@@ -1325,8 +1369,12 @@ def cmd_chat(a):
         say("started agent:concierge")
         # Claude Code can take most of a minute to register a background session (for example while it refreshes
         # its sign-in), so wait well past the usual few seconds before giving up.
+        last_error = None
         for i in range(CHAT_WAIT):
-            job = live_session_id("agent:concierge")
+            try:
+                job = live_session_id("agent:concierge")
+            except AgentViewError as e:
+                job, last_error = None, e
             if job:
                 break
             if i == 5:
@@ -1334,7 +1382,8 @@ def cmd_chat(a):
             time.sleep(1)
         if not job:
             die(f"agent:concierge started but hasn't appeared in Agent View after {CHAT_WAIT}s; it may still be "
-                "starting. Run `abacus chat` again shortly, or pick it in `claude agents`")
+                "starting. Run `abacus chat` again shortly, or pick it in `claude agents`"
+                + (f"\nlast Agent View error: {last_error} (all failures are in {log})" if last_error else ""))
     sys.stdout.flush()  # exec replaces this process; unflushed messages would be lost when output is piped
     os.execvp("claude", ["claude", "attach", job])
 
