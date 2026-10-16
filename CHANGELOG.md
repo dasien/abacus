@@ -19,6 +19,7 @@ operator decides it. See [docs/INSTALL.md](docs/INSTALL.md#versions).
   - **Under the hood:** the session launcher starts lane orchestrators and their successors from the one orchestrator
     entry. The concierge's allowlist accepts `agent:orchestrator-*` session names. Install and update add new
     settings (like `"lanes"`) to an existing fleet without changing yours.
+- Fix: `abacus status` no longer counts a decisions page reading `_None._` as one decision that needs you.
 - Not yet: more than one worker per repository.
 
 ## 0.9.0 (2026-10-16)
