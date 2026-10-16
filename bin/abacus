@@ -1322,7 +1322,10 @@ def agent_view_log(line, failed):
 def agent_view():
     """Agent View's session list, or AgentViewError saying exactly what went wrong (never a silent empty list)."""
     try:
-        p = subprocess.run(["claude", "agents", "--json"], capture_output=True, text=True, timeout=30)
+        # The listing doesn't depend on the folder, and claude refuses to run from a deleted one (a demo reset
+        # recreates the demo folders under a terminal sitting in them), so always ask from home.
+        p = subprocess.run(["claude", "agents", "--json"], capture_output=True, text=True, timeout=30,
+                           cwd=Path.home())
     except (OSError, subprocess.SubprocessError) as e:
         why = f"{type(e).__name__}: {e}"
     else:
@@ -1357,6 +1360,14 @@ CHAT_WAIT = int(os.environ.get("ABACUS_CHAT_WAIT", "90"))
 
 def cmd_chat(a):
     log = HOME / "state" / "agent-view.log"
+    try:
+        here_ok = os.path.isdir(os.getcwd())
+    except FileNotFoundError:
+        here_ok = False
+    if not here_ok:  # `claude attach` would refuse to run from a deleted folder
+        say("this terminal's folder no longer exists (a demo reset recreates the demo folders); attaching from your "
+            "home folder. Run `cd .` afterwards to get back into the new copy")
+        os.chdir(Path.home())
     try:
         job = live_session_id("agent:concierge")
     except AgentViewError as e:  # guessing "not running" here would start a second concierge

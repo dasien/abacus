@@ -27,6 +27,8 @@ operator decides it. See [docs/INSTALL.md](docs/INSTALL.md#versions).
   started a second concierge. The launcher now refuses with `AGENT_VIEW` and the error; `abacus chat` shows it
   instead of starting another. Every failure is logged in `~/.abacus/state/agent-view.log`; `ABACUS_DEBUG=1` prints
   each lookup.
+- Fix: Abacus asks Agent View from your home folder, so a terminal left inside a demo folder that a reset recreated
+  ("The current working directory was deleted") no longer breaks `abacus chat`, the launcher or status.
 - Not yet: more than one worker per repository.
 
 ## 0.9.0 (2026-10-16)

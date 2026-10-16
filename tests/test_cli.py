@@ -284,6 +284,17 @@ class ChatTest(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def test_works_from_a_deleted_folder(self):
+        """A demo reset recreates the demo folders under a terminal sitting in one; chat still works."""
+        gone = Path(self.tmp.name) / "repo-a"
+        gone.mkdir()
+        code = f"import os,shutil,sys; os.chdir({str(gone)!r}); shutil.rmtree({str(gone)!r}); " \
+               f"sys.argv=['abacus','chat']; import runpy; runpy.run_path({str(CLI)!r}, run_name='__main__')"
+        p = subprocess.run([sys.executable, "-c", code], env=self.env, capture_output=True, text=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn("this terminal's folder no longer exists", p.stdout)
+        self.assertTrue(p.stdout.strip().endswith("CLAUDE attach live1"), p.stdout)
+
     def test_attaches_to_the_live_concierge_by_id(self):
         p = subprocess.run([sys.executable, str(CLI), "chat"], env=self.env, capture_output=True, text=True)
         self.assertEqual(p.returncode, 0, p.stderr)
