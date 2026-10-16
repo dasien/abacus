@@ -56,8 +56,7 @@ per folder, and Abacus never answers it for you.
 
 ## 5. Ask Abacus to do the work (5 min)
 ```sh
-abacus demo start      # two workers + the concierge, in the background
-abacus chat            # opens the concierge
+abacus chat            # opens the concierge, starting it if needed
 ```
 Then tell it the line `abacus demo setup` printed, with your two bead ids:
 > Build repo-a-xxx, then repo-b-yyy which depends on it. I approve that order.
@@ -66,7 +65,7 @@ Naming the beads matters: the concierge passes your exact words on, and a goal w
 orchestrator an extra question back to you.
 
 **You should see:**
-- The concierge records your words and starts the orchestrator.
+- The concierge records your words and starts the orchestrator, which starts a worker in each repository.
 - About 5–7 minutes later, both tasks are verified and done.
 
 Ask the concierge "what's going on?" any time. With the status line on, every Claude Code session shows

@@ -41,7 +41,7 @@ Abacus has four parts:
 abacus add <repo root>/myCodeRepo         # bring a repository in: board, conventions, worker, trust
 abacus chat                               # then: "plan <issue link or file>", review it, "build <it>"
 ```
-To see a full run first, try a demo: `abacus demo setup && abacus trust && abacus demo start && abacus chat`.
+To see a full run first, try a demo: `abacus demo setup && abacus trust && abacus chat`.
 
 Sessions run in Claude Code's `auto` permission mode. Background workers isolate each bead in its own git worktree
 (Claude Code enforces this), and Abacus's guards treat that worktree as the session's only writable space.

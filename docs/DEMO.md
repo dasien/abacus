@@ -102,21 +102,23 @@ redacted before the model sees them, and `~/.abacus/state/redactions.jsonl` reco
 
 ### Option A: talk to the concierge (the normal way)
 ```sh
-abacus demo start                  # coder:repo-a, coder:repo-b and agent:concierge (the orchestrator starts on demand)
-abacus chat                        # opens agent:concierge (or switch to it in `claude agents`)
+abacus chat                        # opens agent:concierge, starting it if needed (or switch to it in `claude agents`)
 ```
 > Build repo-a-xxx, then repo-b-yyy which depends on it. I approve that order.
 
 Use the two bead ids `abacus demo setup` printed (`abacus demo status` shows them again). Name the beads: a goal
 without one ("start the orchestrator") makes the orchestrator come back and ask which work you meant.
 
-The concierge records your words verbatim, starts the orchestrator on demand, and sends it a `HANDOFF`. Ask it
+The concierge records your words verbatim, starts the orchestrator on demand, and sends it a `HANDOFF`. The
+orchestrator starts each repository's worker when it dispatches the first bead there, so you don't start any
+sessions yourself. (`abacus demo start` starts the workers and the concierge ahead of time, which only saves the
+first dispatch a few seconds.) Ask it
 "what's going on?" at any time. With `abacus statusline enable`, every Claude Code session shows
 `abacus · 1 in flight` / `abacus · 1 needs you` / `abacus · complete`.
 
 ### Option B: drive the orchestrator yourself
 ```sh
-abacus-session start agent:orchestrator     # in addition to the workers from `abacus demo start`
+abacus-session start agent:orchestrator     # it starts the workers when it dispatches
 claude agents                               # pick agent:orchestrator (attaching by name is ambiguous once old sessions are listed)
 ```
 > Goal: build repo-a's word_count bead, then repo-b's --words bead that depends on it. Recover first, check the
@@ -124,8 +126,6 @@ claude agents                               # pick agent:orchestrator (attaching
 
 ### Option C: unattended, with the sequence pre-approved
 ```sh
-abacus-session start coder:repo-a
-abacus-session start coder:repo-b
 abacus-session start agent:orchestrator --prompt '/recover first. Then here is the operator goal, to be recorded
 verbatim as a ruling: "Build repo-a bead <A> (textkit word_count), then repo-b bead <B> (wc-report --words) which
 waits on it. I approve the A-then-B sequence for this unattended demo run; do not wait for me to approve it. Any other
@@ -186,7 +186,6 @@ This one shows what happens when a worker hits a product question it shouldn't a
 ```sh
 abacus demo setup --scenario decision      # one repo, ledger, with one bead
 abacus trust                               # if it names the new folders
-abacus demo start --scenario decision      # coder:ledger + the concierge
 abacus chat
 ```
 > Build ledger-xxx.
@@ -213,7 +212,6 @@ and a CLI bead adds `bw heartbeat`, which can't start until the SDK change is ve
 ```sh
 abacus demo setup --scenario heartbeat    # once: builds abacus-sandboxes/heartbeat/
 abacus trust
-abacus demo start --scenario heartbeat
 abacus chat                                # tell it the line setup printed: "Build sdk-…, then bwcli-… …"
 ```
 Setup copies the committed `HEAD` of your checkouts and never writes to them. If they aren't at
@@ -244,7 +242,6 @@ The heartbeat's two beads were filed by hand. To have the planner do it:
 ```sh
 abacus demo setup --scenario heartbeat --force     # once after 0.7.0, so the repos get the current filing rules
 abacus demo reset --scenario heartbeat --empty-boards
-abacus demo start --scenario heartbeat
 abacus chat
 ```
 > plan https://github.com/dasien/bwcli-rs/issues/1
@@ -263,9 +260,9 @@ The two-repo demo and the decision demo share no repositories, so they can run s
 ```sh
 abacus demo setup && abacus demo setup --scenario decision    # if they aren't set up already
 abacus trust
-abacus-session start coder:repo-a && abacus-session start coder:repo-b && abacus-session start coder:ledger
 abacus chat
 ```
+Send the two requests as separate messages, so the concierge sees two pieces of work:
 > Build repo-a-xxx, then repo-b-yyy which depends on it. I approve that order.
 
 > Build ledger-zzz.
@@ -275,6 +272,10 @@ orchestrators in `claude agents` (`agent:orchestrator-<lane>`). Ask "how are we 
 answer covers only that lane, including its NEEDS YOU card about the export format. "How are we doing?" gives a line
 per lane, and the status line reads `abacus · 2 lanes · …`. Each lane closes and its orchestrator stops when its work
 is done.
+
+The heartbeat scenario (§6) pairs with the two-repo demo the same way. Its Rust gates take turns with the other
+lane's gates on the machine-wide heavy lock, so expect the pair to take longer than either alone; that wait is the
+lock protecting the machine, not the lanes interfering.
 
 ## 8. Stopping and cleaning up
 ```sh
