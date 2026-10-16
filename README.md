@@ -63,8 +63,10 @@ and asks you when it can't tell which you mean:
 - **work on** it: make progress and report where it stands.
 - or just ask: "how are we doing?", "what needs me?"
 
-The concierge records your words, starts the planner or orchestrator on demand, and hands the work over. Decisions
-that need you show up there and in the status line. Jira and Confluence sources are TBD.
+The concierge records your words, starts the planner or orchestrator on demand, and hands the work over. Unrelated
+work runs in separate **lanes**, each with its own orchestrator ("how are we doing with the android work?" answers
+for that lane only). Decisions that need you show up in the concierge and in the status line. Jira and Confluence
+sources are TBD.
 
 ## Docs
 - [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md): the first 15 minutes, step by step

@@ -258,7 +258,25 @@ abacus chat
 
 `abacus-board find "dasien/bwcli-rs#1"` shows the drafts and their state on both boards at any point.
 
-## 7. Stopping and cleaning up
+## 7. Two lanes at once
+The two-repo demo and the decision demo share no repositories, so they can run side by side as two lanes:
+```sh
+abacus demo setup && abacus demo setup --scenario decision    # if they aren't set up already
+abacus trust
+abacus-session start coder:repo-a && abacus-session start coder:repo-b && abacus-session start coder:ledger
+abacus chat
+```
+> Build repo-a-xxx, then repo-b-yyy which depends on it. I approve that order.
+
+> Build ledger-zzz.
+
+**You should see:** the concierge starts two lanes and names each (for example `textkit` and `ledger`), with two
+orchestrators in `claude agents` (`agent:orchestrator-<lane>`). Ask "how are we doing with the ledger work?": the
+answer covers only that lane, including its NEEDS YOU card about the export format. "How are we doing?" gives a line
+per lane, and the status line reads `abacus · 2 lanes · …`. Each lane closes and its orchestrator stops when its work
+is done.
+
+## 8. Stopping and cleaning up
 ```sh
 abacus demo stop                           # or: abacus-session stop <name>
 ```

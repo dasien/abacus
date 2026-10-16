@@ -4,6 +4,23 @@ One version for all four Abacus repositories (`abacus`, `abacus-standards`, `aba
 Bug fixes bump the patch number, features bump the minor number, and the major number changes only when the
 operator decides it. See [docs/INSTALL.md](docs/INSTALL.md#versions).
 
+## 0.10.0 (2026-10-16)
+- **Lanes: unrelated work side by side.** Each independent line of work runs in its own lane, with its own
+  orchestrator (`agent:orchestrator-<lane>`), its own decisions page, and its own context and cost. Android work and
+  unrelated SDK work can run in parallel.
+  - **On demand:** the concierge opens lanes when work arrives, names them after the work, and tells you the name.
+    There's no cap.
+  - **One active lane per repository,** enforced by the logbook (`LANE`), so lanes never compete for a worker. Work
+    touching a lane's repositories joins it. A lane closes when its program completes, releasing its repositories.
+  - **Status answers what you asked:** "how are we doing with the android work?" covers only that lane. A general
+    question gets a line per lane. You can refer to a lane by its name, a repository, the issue or your own words.
+  - **New commands:** `abacus-logbook lane …` and `abacus status --lane <lane>`. The status line counts lanes. Lanes
+    can be renamed between programs.
+  - **Under the hood:** the session launcher starts lane orchestrators and their successors from the one orchestrator
+    entry. The concierge's allowlist accepts `agent:orchestrator-*` session names. Install and update add new
+    settings (like `"lanes"`) to an existing fleet without changing yours.
+- Not yet: more than one worker per repository.
+
 ## 0.9.0 (2026-10-16)
 - **Draft-PR landing** (contributed by Patrick Honkonen; implements `abacus-8jc`).
   - **Opting in:** with `"landing": "draft-pr"` in a repository's `.abacus/config.json`, each bead lands on its own

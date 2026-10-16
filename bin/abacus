@@ -17,7 +17,7 @@
                                                the logbook); heartbeat keeps its build cache
   abacus chat                                  talk to Abacus: start the concierge if needed and attach to it
   abacus prune [--keep N] [--dry-run]          clear Agent View records of stopped Abacus sessions (never running ones)
-  abacus status                                needs-you, program, in-flight, sessions (one screen)
+  abacus status [--lane L]                     needs-you, a line per lane, in-flight, sessions (one screen)
   abacus statusline enable|disable [--wrap|--replace]
                                                show Abacus state in every Claude Code session's status line;
                                                --wrap keeps a status line you already have and appends to it
@@ -381,9 +381,18 @@ def publish_and_deploy(comps, roots, dev):
     added = [k for k in roles if k not in current["workers"]]  # new roles (e.g. the concierge) join existing fleets
     for k in added:
         current["workers"][k] = roles[k]
-    if added or not fleet.exists():
+    # new settings on existing roles (e.g. the orchestrator's "lanes"), never overwriting a value you set
+    gained = {k: [f for f in roles[k] if f not in current["workers"][k]] for k in roles if k not in added}
+    for k, fields in gained.items():
+        for f in fields:
+            current["workers"][k][f] = roles[k][f]
+    gained = {k: v for k, v in gained.items() if v}
+    if added or gained or not fleet.exists():
         fleet.write_text(json.dumps(current, indent=2) + "\n")
-        say(f"{fleet}: added {', '.join(added)} (add your repositories as coder:<repo> entries)")
+        if added:
+            say(f"{fleet}: added {', '.join(added)} (add your repositories as coder:<repo> entries)")
+        for k, fields in gained.items():
+            say(f"{fleet}: {k} gained {', '.join(fields)}")
     deploy = ["abacus-deploy"] + (["--allow-unpublished"] if dev else [])
     out = run(deploy, env=env, check=False)
     if out.returncode != 0:
@@ -1327,7 +1336,7 @@ def cmd_prune(a):
 
 
 def cmd_status(a):
-    os.execvp("abacus-status", ["abacus-status"])
+    os.execvp("abacus-status", ["abacus-status"] + (["--lane", a.lane] if getattr(a, "lane", None) else []))
 
 
 CLAUDE_SETTINGS = Path.home() / ".claude" / "settings.json"
@@ -1417,7 +1426,8 @@ def main(argv=None):
         if verb == "reset":
             s.add_argument("--empty-boards", action="store_true",
                            help="heartbeat: start with no beads filed, to test filing")
-    sub.add_parser("chat"); sub.add_parser("status")
+    sub.add_parser("chat")
+    st = sub.add_parser("status"); st.add_argument("--lane", help="only this lane")
     pr = sub.add_parser("prune"); pr.add_argument("--keep", type=int, default=1)
     pr.add_argument("--dry-run", action="store_true")
     sl = sub.add_parser("statusline"); sl.add_argument("action", choices=("enable", "disable"))

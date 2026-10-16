@@ -40,6 +40,19 @@ so the concierge asks which. A remark ("we should probably…", "I wonder if…"
 work. Releases, tags, publishing and deploying are never implied by any request; those stay yours. You can name work
 by its source ("build dasien/bwcli-rs#1") instead of bead ids: `abacus-board find` searches every board.
 
+## Lanes: unrelated work side by side
+Each independent line of work runs in its own **lane**: its own orchestrator (`agent:orchestrator-<lane>`), its own
+decisions page, and its own context and cost. Android work and unrelated SDK work run as two lanes in parallel,
+without crowding each other.
+- **On demand.** The concierge opens a lane when new work arrives, names it after the work (`android`,
+  `sdk-heartbeat`), and tells you the name. There's no limit on how many run at once.
+- **One lane per repository.** A repository belongs to at most one active lane, enforced by the logbook (`LANE`),
+  so lanes never compete for a worker. Work touching a lane's repositories joins that lane; when a lane's program
+  completes it closes and releases them.
+- **Ask about what you mean.** "How are we doing with the android work?" is answered from that lane alone. A general
+  "how are we doing?" gives a line per lane. You can name a lane however you like ("the login fix", the issue, a
+  repository); the concierge matches it, and asks if it's ambiguous. "What lanes are running?" lists them.
+
 ## The pieces
 
 | Piece | How Abacus does it |
@@ -58,6 +71,7 @@ by its source ("build dasien/bwcli-rs#1") instead of bead ids: `abacus-board fin
 | Logbook | `abacus-logbook` (SQLite): current-state vs insert-only event tables (enforced by triggers), dispatch preconditions that fail closed (`PAUSED`, `ATTENDED`, `UNKNOWN_WORKER`, `WRONG_REPO`, `DUPLICATE`, `PREREQUISITE`, `UNRELAYED`, `BAD_CHECK`), recorded ruling relays, <1 KB digest, `rebuild` from boards |
 | Agent View | `abacus-session` launcher (`claude --bg -n <role>:<repo>`, `auto` mode by default, shared memory passed explicitly, `~/.abacus/bin` on `PATH`), refusal codes, liveness reconciliation, `stop` that sees unsaved work in worktrees |
 | Coordination protocol | `abacus-agents/protocol/PROTOCOL.md` + the worker contract skill `/abacus-worker`. A `RULING` message is the relay, recorded by a hook. A dispatch can carry `checks:`, read-only commands `abacus-verify` must see pass |
+| Lanes | `abacus-logbook lane open/add/close/rename/show/find/owner`: each lane's goal (your words), repositories and items; one active lane per repository (`LANE`); dispatches record their lane. `abacus-status --lane` scopes status; each lane has `pages/decisions-<lane>.md`; the launcher starts `agent:orchestrator-<lane>` (and its `-g<n>` successors) from the one orchestrator entry |
 | Orchestrator | `agent:orchestrator` (Opus): capped CLAUDE.md (8 rules), skills (`/recover`, `/handoff`, `/dispatch-bead`, `/verify-report`, `/relay-ruling`, `/file-proposals`, `/check-in`, `/hand-over`, `/decisions-page`), role-policy fence, SendMessage logging hook. Starts on demand and stops itself when a program completes |
 | Planner | `agent:planner` (Opus): turns a source (GitHub issue, local file, pasted text; Jira and Confluence TBD) into **draft** beads on every fleet repository involved, in order, with `WAITS-ON` lines, external edges and a proposed pipeline label each. One `PLAN-REVIEW` goes to the operator through the concierge. The `foreign-bd` guard lets it file and shape drafts only, and apply a pipeline label (or lift `draft`) only on beads an operator ruling names; `abacus-board brief` refuses a draft |
 | Concierge | `agent:concierge` (Sonnet): the operator's front door, a dedicated session in Agent View (`abacus chat`). It answers from durable state (Agent View first for what's running), records the operator's words verbatim (its one write), finds work on any board, starts the planner or orchestrator on demand, and passes instructions on with a `HANDOFF` (`STATUS: decided \| lean`). A `role-commands` guard enforces its command allowlist. Design: `abacus-agents/docs/CONCIERGE.md` |

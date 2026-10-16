@@ -594,3 +594,25 @@ class UpdateTest(unittest.TestCase):
         shipped = json.loads((CLI.parents[1] / "sources.json").read_text())["repos"]
         self.assertEqual(shipped["abacus-agents"]["url"], "https://github.com/dasien/abacus-agents.git")
         self.assertEqual({v["branch"] for v in shipped.values()}, {"main"})
+
+
+class FleetMergeTest(unittest.TestCase):
+    """0.10.0: an existing fleet gains new settings on its roles (the orchestrator's "lanes") without losing yours."""
+
+    def test_existing_roles_gain_new_settings_and_keep_your_values(self):
+        with tempfile.TemporaryDirectory() as t:
+            t = Path(t).resolve()
+            env = dict(os.environ, HOME=str(t), ABACUS_HOME=str(t / ".abacus"), ABACUS_NO_PATH_LINK="1")
+            (t / ".abacus").mkdir()
+            (t / ".abacus" / "fleet.json").write_text(json.dumps({"workers": {
+                "agent:orchestrator": {"repo": "~/.abacus/agents/orchestrator", "model": "sonnet"},
+                "coder:mine": {"repo": "/x/mine"}}}))
+            (t / "ws").mkdir()
+            p = subprocess.run([sys.executable, str(CLI), "install", "--dev", "--skip-prereqs", "--workspace",
+                                str(t / "ws")], env=env, capture_output=True, text=True, stdin=subprocess.DEVNULL)
+            self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+            w = json.loads((t / ".abacus" / "fleet.json").read_text())["workers"]
+            self.assertTrue(w["agent:orchestrator"]["lanes"])
+            self.assertEqual(w["agent:orchestrator"]["model"], "sonnet")        # your value kept
+            self.assertIn("coder:mine", w)
+            self.assertIn("agent:orchestrator gained", p.stdout)
