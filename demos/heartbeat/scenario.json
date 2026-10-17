@@ -5,7 +5,7 @@
     "sdk-internal": {
       "branch": "main",
       "prefix": "sdk",
-      "gate": "cargo fmt -p bitwarden-core --check && cargo clippy -q -p bitwarden-core --all-features --all-targets -- -D warnings && cargo test -q -p bitwarden-core --all-features",
+      "gate": "cargo +{rustfmt_nightly} fmt -p bitwarden-core --check && cargo clippy -q -p bitwarden-core --all-features --all-targets -- -D warnings && cargo test -q -p bitwarden-core --all-features",
       "fast": "cargo check -q -p bitwarden-core --all-features"
     },
     "bwcli-rs": {
@@ -21,7 +21,7 @@
       "title": "Add PlatformClient::heartbeat() returning the current UTC date and time",
       "type": "feature",
       "description": "FILED AGAINST: {sha}\nSOURCE: {source}\n\nThe Rust CLI (bwcli-rs) is adding `bw heartbeat`, which prints the current date and time. The time must come from\nthe SDK, so the CLI exercises a real SDK call. This bead is the SDK half: a public heartbeat method on bitwarden-core\nthat returns the current date and time to the caller.\n\nWhere it fits: `client.platform()` (crates/bitwarden-core/src/platform/platform_client.rs) already hosts small\nutility calls such as `fingerprint`, so `client.platform().heartbeat()` is the natural home. Return a\n`chrono::DateTime<chrono::Utc>` (chrono is already a bitwarden-core dependency). It needs no login, network or state.\n\nConsumer: bwcli-rs bead (filed next) waits on this one and calls the method once it is verified on origin/main.\n\nOut of scope: uniffi/wasm bindings, any other crate, changes to existing PlatformClient methods.",
-      "acceptance": "- `grep -n \"pub fn heartbeat\" crates/bitwarden-core/src/platform/platform_client.rs` shows a public `heartbeat` method on `PlatformClient` returning `chrono::DateTime<chrono::Utc>`\n- a unit test in bitwarden-core asserts the returned time is no earlier than a `Utc::now()` taken before the call and no later than one taken after it\n- the gate passes: `cargo fmt -p bitwarden-core --check && cargo clippy -q -p bitwarden-core --all-features --all-targets -- -D warnings && cargo test -q -p bitwarden-core --all-features`\n- `git diff --stat origin/main...HEAD` lists files under `crates/bitwarden-core/` only",
+      "acceptance": "- `grep -n \"pub fn heartbeat\" crates/bitwarden-core/src/platform/platform_client.rs` shows a public `heartbeat` method on `PlatformClient` returning `chrono::DateTime<chrono::Utc>`\n- a unit test in bitwarden-core asserts the returned time is no earlier than a `Utc::now()` taken before the call and no later than one taken after it\n- the gate passes: `{gate}`\n- `git diff --stat origin/main...HEAD` lists files under `crates/bitwarden-core/` only",
       "labels": [
         "pipeline:lite",
         "export:heartbeat"

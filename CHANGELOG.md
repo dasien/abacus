@@ -32,6 +32,10 @@ operator decides it. See [docs/INSTALL.md](docs/INSTALL.md#versions).
 - Promises carry their lane (`promise add --lane`, or inferred from a lane's work item), so one lane's orchestrator
   no longer reads another lane's live promise as stale. A lane can't close while it owes a promise. Found by the
   first two-lane run.
+- Heartbeat scenario: the SDK gate formats with sdk-internal's pinned nightly rustfmt, read from its
+  `rust-toolchain.toml` at setup, instead of stable. Stable ignores the SDK's unstable rustfmt options, so it
+  passed code the SDK's own lint would reject. The SDK bead's criteria quote the actual gate. Demo setup no longer
+  suggests `abacus demo start`.
 - Not yet: more than one worker per repository.
 
 ## 0.9.0 (2026-10-16)

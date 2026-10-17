@@ -9,7 +9,7 @@
   abacus update [--check]                      update your clones from their sources (sources.json), publish, deploy
   abacus trust                                 open each Abacus folder Claude Code hasn't trusted yet, one at a time
   abacus demo setup [--scenario S] [--force]   generate a demo sandbox: two-repo (default), decision or heartbeat
-  abacus demo start                            start coder:repo-a, coder:repo-b and agent:concierge in Agent View
+  abacus demo start                            optional: start the workers and concierge ahead of time
   abacus demo status                           doctor both repos, logbook digest, session liveness
   abacus demo stop                             stop the demo sessions (refuses unsaved work)
   abacus demo reset [--scenario S] [--empty-boards]
@@ -951,8 +951,9 @@ def file_beads(scenario, repos):
     spec, ids = scenario_spec(scenario), {}
     for b in spec["beads"]:
         repo = repos[b["repo"]]
+        cfg = repo / ".abacus" / "config.json"
         values = {"sha": git(repo, "rev-parse", "--short", "HEAD").stdout.strip(), "source": spec.get("source", ""),
-                  **ids}
+                  "gate": json.loads(cfg.read_text()).get("gate", "") if cfg.exists() else "", **ids}
         args = ["create", fill(b["title"], values), "-t", b.get("type", "task"), "-d", fill(b["description"], values),
                 "--acceptance", fill(b["acceptance"], values), "--silent"]
         if spec.get("source"):
@@ -1017,7 +1018,6 @@ def cmd_demo_setup(a):
 {describe_beads("two-repo", repos, beads)}
 {trust_hint()}Next:
   abacus demo status                 # doctor both repos (guards, gates, workflows...)
-  abacus demo start                  # start the two workers and the concierge in Agent View
   abacus chat                        # then tell the concierge, naming both beads:
       {first_message("two-repo", beads)}
 """)
@@ -1038,7 +1038,6 @@ def setup_decision(a):
 {describe_beads("decision", repos, beads)}  The default format (CSV or JSON) is an open product decision for you.
 
 {trust_hint()}Next:
-  abacus demo start --scenario decision   # coder:ledger + the concierge
   abacus chat                             # then tell the concierge:
       {first_message("decision", beads)}
 What to expect: the worker refuses to guess the default and asks for a ruling. A NEEDS YOU card appears (the
@@ -1130,6 +1129,25 @@ def archive_run_state(scenario):
             ([f"{len(moved)} page(s) in state/archive/{scenario}-{n}/"] if moved else [])))
 
 
+def heartbeat_gate(repo, gate):
+    """Fill {rustfmt_nightly} with the nightly the repository formats with (`nightly-channel` in its
+    rust-toolchain.toml, as sdk-internal's CI does): stable rustfmt ignores its unstable options, so a stable check
+    would pass code the repository's own lint rejects."""
+    if "{rustfmt_nightly}" not in gate:
+        return gate
+    toml = repo / "rust-toolchain.toml"
+    m = re.search(r'^nightly-channel\s*=\s*"([^"]+)"', toml.read_text() if toml.exists() else "", re.M)
+    if not m:
+        die(f"{repo.name}: its gate formats with the repository's pinned nightly, but {toml} names no "
+            "nightly-channel")
+    nightly = m.group(1)
+    have = run(["rustup", "toolchain", "list"], check=False).stdout if shutil.which("rustup") else ""
+    if not any(line.startswith(nightly) for line in have.splitlines()):
+        die(f"{repo.name} formats with {nightly}, which isn't installed. Install it once, then rerun:\n"
+            f"  rustup toolchain install {nightly} --profile minimal --component rustfmt")
+    return gate.replace("{rustfmt_nightly}", nightly)
+
+
 def setup_heartbeat(a):
     for tool in ("bd", "abacus-adopt", "cargo"):
         if not shutil.which(tool):
@@ -1155,9 +1173,10 @@ def setup_heartbeat(a):
         git(d, "clone", "-q", str(bare), name)
         say(f"{name}: copied {git(d / name, 'log', '--oneline', '-1').stdout.strip()} from {src[name]}")
     repos = {n: d / n for n in heartbeat_repos()}
+    gates = {n: heartbeat_gate(repos[n], spec["gate"]) for n, spec in heartbeat_repos().items()}
     for name, spec in heartbeat_repos().items():
         say(f"{name}: running its gate before the first push (slow on a cold build cache)")
-        adopt("heartbeat", repos, name, spec["prefix"], spec["gate"], spec["fast"], spec["branch"],
+        adopt("heartbeat", repos, name, spec["prefix"], gates[name], spec["fast"], spec["branch"],
               "Adopt Abacus conventions (heartbeat pilot sandbox)")
     link_sdk_into_worktrees(d / "bwcli-rs")
     beads = file_beads("heartbeat", repos)
@@ -1173,7 +1192,7 @@ def setup_heartbeat(a):
 
 
 def heartbeat_next(beads):
-    lines = [f"\n{trust_hint()}Next:", "  abacus demo start --scenario heartbeat   # both workers + the concierge"]
+    lines = [f"\n{trust_hint()}Next:"]
     if beads:
         lines += ["  abacus chat                              # then tell the concierge:",
                   f"      {first_message('heartbeat', beads)}"]

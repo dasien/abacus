@@ -219,6 +219,9 @@ abacus chat                                # tell it the line setup printed: "Bu
 Setup copies the committed `HEAD` of your checkouts and never writes to them. If they aren't at
 `<workspace parent>/bitwarden/`, pass `--sdk-repo` and `--cli-repo` once; they're remembered. Pushes go to local
 bare remotes in `remotes/`, so nothing reaches GitHub. Both repos share one cargo build folder, `target/`.
+The SDK's gate formats with the nightly rustfmt that sdk-internal pins (`nightly-channel` in its
+`rust-toolchain.toml`), as the SDK's own CI does: stable rustfmt ignores its unstable options. Setup tells you the
+`rustup toolchain install …` command if that nightly is missing.
 
 **Running it again.** Each run changes the repos and boards, so put them back between runs:
 

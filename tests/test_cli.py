@@ -363,6 +363,50 @@ class ChatAgentViewErrorTest(unittest.TestCase):
             self.assertIn("FAILED: exit 1: API Error: 401", (t / ".abacus" / "state" / "agent-view.log").read_text())
 
 
+class HeartbeatGateTest(unittest.TestCase):
+    """The SDK formats with its pinned nightly; stable rustfmt ignores its unstable options (abacus-standards-f06)."""
+
+    def setUp(self):
+        from importlib.machinery import SourceFileLoader
+        self.cli = SourceFileLoader("abacus_cli_hb", str(CLI)).load_module()
+        self.tmp = tempfile.TemporaryDirectory()
+        t = Path(self.tmp.name)
+        self.repo, self.bin = t / "sdk-internal", t / "bin"
+        self.repo.mkdir(); self.bin.mkdir()
+        (self.bin / "rustup").write_text("#!/bin/sh\necho 'stable-aarch64-apple-darwin (default)'\n"
+                                         "echo 'nightly-2026-09-01-aarch64-apple-darwin'\n")
+        (self.bin / "rustup").chmod(0o755)
+        self.path = os.environ["PATH"]
+        os.environ["PATH"] = f"{self.bin}{os.pathsep}{self.path}"
+        self.gate = self.cli.scenario_spec("heartbeat")["repos"]["sdk-internal"]["gate"]
+
+    def tearDown(self):
+        os.environ["PATH"] = self.path
+        self.tmp.cleanup()
+
+    def pin(self, nightly):
+        (self.repo / "rust-toolchain.toml").write_text(
+            f'[toolchain]\nchannel = "1.98.0"\n\n# used by Renovate\nnightly-channel = "{nightly}"\n')
+
+    def test_uses_the_repositorys_pinned_nightly(self):
+        self.pin("nightly-2026-09-01")
+        gate = self.cli.heartbeat_gate(self.repo, self.gate)
+        self.assertTrue(gate.startswith("cargo +nightly-2026-09-01 fmt -p bitwarden-core --check && "), gate)
+
+    def test_missing_toolchain_stops_with_the_install_command(self):
+        self.pin("nightly-2026-10-01")
+        with self.assertRaises(SystemExit):
+            self.cli.heartbeat_gate(self.repo, self.gate)
+
+    def test_no_pin_stops(self):
+        (self.repo / "rust-toolchain.toml").write_text('[toolchain]\nchannel = "1.98.0"\n')
+        with self.assertRaises(SystemExit):
+            self.cli.heartbeat_gate(self.repo, self.gate)
+
+    def test_other_gates_pass_through(self):
+        self.assertEqual(self.cli.heartbeat_gate(self.repo, "cargo test -q --workspace"), "cargo test -q --workspace")
+
+
 class RenameTest(unittest.TestCase):
     """0.4.0 renamed abacus-orchestrator to abacus-agents: the installer explains a checkout under the old name."""
 
