@@ -4,6 +4,15 @@ One version for all four Abacus repositories (`abacus`, `abacus-standards`, `aba
 Bug fixes bump the patch number, features bump the minor number, and the major number changes only when the
 operator decides it. See [docs/INSTALL.md](docs/INSTALL.md#versions).
 
+## 0.10.1 (2026-10-16)
+- **Git hooks keep git's own environment out of the gate** (contributed by Patrick Honkonen, abacus-standards#4).
+  When git runs the pre-commit and pre-push hooks, it sets `GIT_DIR` and `GIT_INDEX_FILE`, and the gate inherited
+  them. So a test suite that ran git against a scratch repository acted on the real one instead. In one project's
+  bead worktrees, every tracked file ended up staged as deleted after a push, and the shared config was set to
+  `core.bare = true`. The hooks now unset those variables before the gate runs, with a regression test that
+  reproduces the damage from a worktree.
+  - **Existing repositories get the fix when re-adopted,** because the hooks are copied into each repository.
+
 ## 0.10.0 (2026-10-16)
 - **Lanes: unrelated work side by side.** Each independent line of work runs in its own lane, with its own
   orchestrator (`agent:orchestrator-<lane>`), its own decisions page, and its own context and cost. Android work and
