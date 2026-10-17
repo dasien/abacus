@@ -29,6 +29,9 @@ operator decides it. See [docs/INSTALL.md](docs/INSTALL.md#versions).
   each lookup.
 - Fix: Abacus asks Agent View from your home folder, so a terminal left inside a demo folder that a reset recreated
   ("The current working directory was deleted") no longer breaks `abacus chat`, the launcher or status.
+- Promises carry their lane (`promise add --lane`, or inferred from a lane's work item), so one lane's orchestrator
+  no longer reads another lane's live promise as stale. A lane can't close while it owes a promise. Found by the
+  first two-lane run.
 - Not yet: more than one worker per repository.
 
 ## 0.9.0 (2026-10-16)
