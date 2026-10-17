@@ -68,7 +68,9 @@ orchestrator an extra question back to you.
 - The concierge records your words and starts the orchestrator, which starts a worker in each repository.
 - About 5–7 minutes later, both tasks are verified and done.
 
-Ask the concierge "what's going on?" any time. With the status line on, every Claude Code session shows
+Ask the concierge "what's going on?" any time. Give it unrelated work while this runs and it opens a second, named
+**lane** with its own orchestrator; "how are we doing with <that work>?" then answers for that lane only
+([DEMO.md](DEMO.md) §7). With the status line on, every Claude Code session shows
 `abacus · 1 in flight` → `abacus · complete`.
 
 ## Where to look afterwards

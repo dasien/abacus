@@ -1,6 +1,9 @@
 # Roadmap and known limits
 
 ## Next
+- **More than one worker per repository.** Lanes (0.10.0) run unrelated work side by side, but a repository belongs
+  to one lane at a time and has one worker, so two lanes can't work in the same repository at once. Several
+  workers per repository, each in its own worktree, is the next step there.
 - **Draft PRs by default for shared repositories.** Draft-PR landing exists now (`"landing": "draft-pr"` in a
   repository's `.abacus/config.json`), but it's opt-in and `abacus add` doesn't offer it yet. It should ask, and the
   demos should show it.
@@ -21,7 +24,7 @@
   can replace the engine without changing callers.
 - **Plugin packaging**: conventions are vendored into each repository by `abacus-adopt` so the doctor can check them
   byte-for-byte and code review sees every change. A Claude Code plugin marketplace could distribute skills later.
-- **Decisions page UI**: `pages/decisions.md` is plain markdown.
+- **Decisions page UI**: `pages/decisions.md` (and `decisions-<lane>.md` per lane) is plain markdown.
 
 ## How proposals are tracked
 The orchestrator turns retro actions into beads on the Abacus repositories' own boards (label `retro-action`),
@@ -51,10 +54,12 @@ a shared Beads remote is set up (`bd dolt push`).
 - **Project `.mcp.json` isn't discovered everywhere.** In the orchestrator's (non-repository) directory Claude Code
   never loaded it, and never asked for approval. The launcher passes the memory server explicitly with
   `--mcp-config`. Sessions you start yourself outside a repository may not have `consult_memory`.
+- **Lanes share the machine.** Each lane has its own orchestrator and workers, but gates and pushes from every lane
+  take turns on the one machine-wide heavy lock, so parallel lanes finish later than either alone would.
 - **Dispatch checks are deliberately narrow.** One read-only program per check, executed without a shell, from an
   allowlist (grep, test, cat, read-only git, ...). Anything richer belongs in the bead's acceptance criteria.
 - **Coordination cost.** In test runs the orchestrator (Opus) used 34-56k output tokens per two-bead program,
-  2-3x both workers combined. The planner also runs on Opus. Track it per role, and cut wake-ups before tuning worker prompts.
+  2-3x both workers combined. Each lane runs its own orchestrator, so two lanes cost about twice that. The planner also runs on Opus. Track it per role, and cut wake-ups before tuning worker prompts.
 - **Ruling attestation reads the session transcript.** The `human-only` guard accepts quoted operator words only if
   they appear in a user turn whose `promptSource` is typed or SDK-submitted, excluding tool results, skill text, task
   notifications and relayed agent messages, or if they are already in the logbook. This relies on Claude Code's
