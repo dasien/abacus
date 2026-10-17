@@ -4,6 +4,18 @@ One version for all four Abacus repositories (`abacus`, `abacus-standards`, `aba
 Bug fixes bump the patch number, features bump the minor number, and the major number changes only when the
 operator decides it. See [docs/INSTALL.md](docs/INSTALL.md#versions).
 
+## 0.10.2 (2026-10-16)
+- **The doctor no longer fails every repository after its first background session.** When Claude Code creates a
+  session's worktree, it rewrites a relative `core.hooksPath` (`.githooks`, as adoption sets it) to the absolute
+  path of the same folder, in the repository's shared config. The doctor's gate check insisted on the exact text
+  `.githooks`, so it reported NOT ADOPTED although the gates still ran. It now checks where the setting points:
+  `.githooks`, or any path to this repository's own `.githooks`, passes. It fails, with the reason and the
+  one-line fix, when:
+  - the setting is unset
+  - it points at a folder that doesn't exist. A moved repository leaves an absolute path pointing nowhere, and git
+    then runs no gates at all without saying so.
+  - it points somewhere else, such as Beads' `.beads/hooks` after a manual `bd init` without `--skip-hooks`
+
 ## 0.10.1 (2026-10-16)
 - **Git hooks keep git's own environment out of the gate** (contributed by Patrick Honkonen, abacus-standards#4).
   When git runs the pre-commit and pre-push hooks, it sets `GIT_DIR` and `GIT_INDEX_FILE`, and the gate inherited
