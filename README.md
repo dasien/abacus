@@ -70,8 +70,11 @@ sources are TBD.
 
 ## Docs
 - [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md): the first 15 minutes, step by step
+- [docs/END-TO-END.md](docs/END-TO-END.md): the whole path from install to results, with diagrams
 - [docs/INSTALL.md](docs/INSTALL.md): installing, upgrading, uninstalling
 - [docs/DEMO.md](docs/DEMO.md): the demos step by step, and what a good run looks like
 - [docs/CONCEPTS.md](docs/CONCEPTS.md): architecture, state model, authority boundary, and what enforces what
+- [docs/DRAFT-PR-LANDING.md](docs/DRAFT-PR-LANDING.md): ending each bead at a draft PR on repositories that take
+  changes through review
 - [docs/ROADMAP.md](docs/ROADMAP.md): what's next, what's deliberately not built yet, and known limits
 - [CHANGELOG.md](CHANGELOG.md): what each version changed, and how the version number moves

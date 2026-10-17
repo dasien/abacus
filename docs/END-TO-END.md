@@ -47,8 +47,8 @@ sequenceDiagram
     A->>C: plan applied
     Note over U,G: Build
     U->>C: "build dasien/bwcli-rs#35;1"
-    C->>U: "Recorded. I'll ask the orchestrator to build it."
-    C->>A: hand off to the orchestrator (started on demand)
+    C->>U: "Recorded. Started the heartbeat lane to build it."
+    C->>A: hand off to that lane's orchestrator (started on demand)
     Note over U,G: Watch
     loop each bead, in dependency order
         A->>A: dispatch to the repo's worker, which builds, tests and reviews
@@ -100,11 +100,11 @@ Approve the drafts, their order and proposed sizes, or say what to change. See [
 
 ### Build
 
-Say "build" with the source or a bead, and Abacus runs it and everything it depends on, in order. See [How you talk to it](CONCEPTS.md#how-you-talk-to-it).
+Say "build" with the source or a bead, and Abacus runs it and everything it depends on, in order. Each unrelated piece of work runs in its own named lane with its own orchestrator, so you can start another while the first runs; the concierge tells you each lane's name. See [How you talk to it](CONCEPTS.md#how-you-talk-to-it) and [Lanes](CONCEPTS.md#lanes-unrelated-work-side-by-side).
 
 ### Watch
 
-Use the status line, `abacus status`, or ask the concierge "how are we doing?". See [Where to look afterwards](GETTING-STARTED.md#where-to-look-afterwards).
+Use the status line, `abacus status`, or ask the concierge "how are we doing?". With several lanes running, ask about one ("how are we doing with the heartbeat work?") to hear only about that lane, or use `abacus status --lane <lane>`. See [Where to look afterwards](GETTING-STARTED.md#where-to-look-afterwards).
 
 ### Decide
 
