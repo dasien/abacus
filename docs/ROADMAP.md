@@ -14,6 +14,7 @@
 - **Verify that a consumer pins the producer version the orchestrator verified.** A read-only `--check` covers a pin
   today. A general check should be designed against a real multi-repository case.
 - **Calibrate shared memory** once real repositories feed it (`abacus-memory calibrate`).
+- **Use the plugins a team already has.** Teams often publish Claude Code plugins that encode their conventions, such as Bitwarden's `bitwarden-delivery-tools`, which composes PR titles, template bodies and labels. Workers should call those skills so a draft PR follows the team's rules without Abacus keeping its own copy of them.
 
 ## Deliberately not built yet
 - **Periodic inspection**: a weekly review of what escaped, a monthly audit of decisions and rules, a quarterly
@@ -35,7 +36,7 @@ a shared Beads remote is set up (`bd dolt push`).
 - **A build pushes to the default branch unless the repository opts into draft PRs.** Set `"landing": "draft-pr"`
   in its `.abacus/config.json` for any repository whose default branch is protected or shared: each bead then lands
   on its own branch and closes when its draft PR opens, and merging stays with people. Draft-PR landing needs the
-  GitHub CLI (`gh`), signed in.
+  GitHub CLI (`gh`), signed in. See [Draft-PR landing](DRAFT-PR-LANDING.md).
 - **Cross-repository dependencies are recorded on the boards, but enforced by the logbook.** Beads 1.3 stores
   `external:<project>:<capability>` edges and `bd ship` marks capabilities delivered. With separate embedded
   databases, `bd ready` doesn't treat unshipped external edges as blocking. Abacus records the edge for visibility,
@@ -68,6 +69,8 @@ a shared Beads remote is set up (`bd dolt push`).
 - **The message protocol is a convention.** No parser rejects a malformed DISPATCH. Enforcement comes from logbook
   preconditions, tests over the templates, and verification on receipt.
 - **The worker contract is advisory.** It binds only repositories that adopted it.
+- **A repository's own checks also judge the vendored files.** The fast check runs on every commit, including the adoption commit, so a repository with strict lint, format or spelling rules refuses Abacus's guards, skills and workflows under `.claude/`. Exclude `.claude/` from those tools before adopting (for ruff, `extend-exclude = [".claude"]`).
+- **Beads are visible only from inside each repository.** Every repository keeps its own board, so an operator working from a directory above the repositories has no direct view of the beads Abacus is working from. `abacus status` shows what is in flight and `abacus-board find` searches every fleet board by text; for anything else, ask the concierge or run `bd` inside the repository.
 - **Workflow-stage detection** (`stage-writes` guard) relies on the hook payload's `agent_type` starting with
   `workflow` (observed live as `workflow-subagent` on Claude Code 2.1.296), or on `ABACUS_STAGE=1`. Re-check after
   Claude Code upgrades: `agent_type` is recorded in `~/.abacus/state/refusals.jsonl`. `abacus-finalize` is the

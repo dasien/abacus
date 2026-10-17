@@ -30,7 +30,7 @@ agent reads them the same way:
 | What you ask for | The concierge reads it as | It's done when |
 |---|---|---|
 | a plan: "plan X", "scope this", "break this issue into beads", "turn this PDR into work" | **plan**: the planner drafts beads across every repository involved, with proposed labels | you approve the plan, in your words |
-| finished work: "build X", "ship it", "finish", "deliver", "do X" | **build**: X and every bead it depends on, in order | every one of those beads is closed and its commit verified |
+| finished work: "build X", "ship it", "finish", "deliver", "do X" | **build**: X and every bead it depends on, in order | every one of those beads is closed and its commit verified: on the default branch, or with draft-PR landing at the head of the bead's open draft PR |
 | progress: "work on X", "make a start on", "push X along" | **work on**: advance X only | X reaches any report: closed, progress, blocked or needs-ruling |
 | a question: "how are we doing?", "what needs me?", "what happened to X?" | an answer from durable state | — |
 | an answer to a card: "go with b", "CSV", "approved" | a ruling, recorded verbatim and passed on | — |
@@ -61,7 +61,7 @@ without crowding each other.
 | Filing and review skills | `/bead-file` (story · bug · epic · decompose), `/bead-close`, `/judgments`, `/adversarial-review`, `/retro` |
 | Dynamic Workflows | `abacus-one-shot`, `abacus-lite`, `abacus-full` (one shared body), stages with structured outputs, a read-only probe after each stage, bounded fix rounds (an incomplete review is re-asked, not "fixed"), verdicts aligned to criteria by index, clean escalation that saves its patch |
 | Worker isolation | Claude Code enforces a per-session git worktree for background sessions (`.claude/worktrees/<name>`). Abacus is worktree-native: one worktree per bead; the fence makes it the session's only writable space while protecting its control files; the board resolves to the main checkout; the run fast-forwards to origin first; the worktree is removed after a verified close and kept on escalation |
-| Finishing script | `abacus-finalize`: refuses unless every criterion is `met` with evidence (or `moved` to a valid measurement bead); commits with trailers, checks them, pushes, then closes |
+| Finishing script | `abacus-finalize`: refuses unless every criterion is `met` with evidence (or `moved` to a valid measurement bead); commits with trailers, checks them, pushes, then closes. With `"landing": "draft-pr"` it pushes the bead's own branch and opens a draft PR before closing ([Draft-PR landing](DRAFT-PR-LANDING.md)) |
 | Git hooks | `.githooks/pre-commit` (fast check), `.githooks/pre-push` (full gate under the heavy lock) |
 | Guards | `guards.py`: repo-fence, foreign-bd, destructive-git, stage-writes, database-url, operator-only, secrets, human-only, role-policy, role-commands; refusal log; negative-control tests |
 | Human-only actions | `human-only` guard: operator rulings must be quoted from a genuine operator turn in the session transcript (or a ruling already in the logbook); no browser/desktop control as the signed-in operator; decision records (`docs/adr`, `docs/decisions`) change only with a one-time `abacus-authorize` grant that agents cannot issue |
