@@ -1345,6 +1345,9 @@ def agent_view():
         # recreates the demo folders under a terminal sitting in them), so always ask from home.
         p = subprocess.run(["claude", "agents", "--json"], capture_output=True, text=True, timeout=30,
                            cwd=Path.home())
+    except FileNotFoundError:  # no claude installed: nothing can be running
+        agent_view_log("claude agents --json: claude is not installed; no sessions", failed=False)
+        return []
     except (OSError, subprocess.SubprocessError) as e:
         why = f"{type(e).__name__}: {e}"
     else:
