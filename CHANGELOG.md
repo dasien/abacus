@@ -20,7 +20,8 @@ Fixes from adding a real CMake project (6502_Kernel, in a folder named `6502 Ker
   so `abacus add` runs it once first, before creating anything. If it fails, you see why and can enter other
   commands, and nothing has been created.
 - **A stopped `abacus add` can carry on.** The worker is registered only after the commit, and rerunning `abacus add`
-  continues when the only uncommitted changes are Abacus's own files. It reuses the earlier commands and replaces an
+  continues when the only uncommitted changes are Abacus's own files. It reuses the earlier commands (or applies
+  the `--gate`/`--fast-check` you pass, or the detected ones you accept when the stored ones fail) and replaces an
   earlier registration of the same repository under another name.
 
 ## 0.10.2 (2026-10-16)

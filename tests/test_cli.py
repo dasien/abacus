@@ -633,6 +633,25 @@ class AddRepositoryTest(unittest.TestCase):
         self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=r, capture_output=True,
                                         text=True).stdout.strip(), "")
 
+    def test_a_rerun_with_new_commands_replaces_the_failing_ones(self):
+        """The 0.10.2 adoption stored `make test`; adoption keeps an existing config, so add must apply new ones."""
+        self.abacus("install", "--dev", "--skip-prereqs", "--workspace", str(self.ws))
+        r = self.make_repo()
+        adopt = subprocess.run(["abacus-adopt", "--project", "x", "--branch", "main", "--gate", "make test",
+                                "--fast-check", "make test"], cwd=r, env=dict(self.env, PATH=str(
+                                    self.t / ".abacus" / "bin") + os.pathsep + os.environ["PATH"]),
+                               capture_output=True, text=True)
+        self.assertEqual(adopt.returncode, 0, adopt.stderr)
+        p = self.abacus("add", str(r), "--yes")                      # the stored commands fail: say so, change nothing
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("the quick check failed", p.stderr)
+        p = self.abacus("add", str(r), "--yes", "--gate", "make gate", "--fast-check", "make check")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        cfg = json.loads((r / ".abacus" / "config.json").read_text())
+        self.assertEqual((cfg["gate"], cfg["fast_check"]), ("make gate", "make check"))
+        log = subprocess.run(["git", "log", "-1", "--format=%s"], cwd=r, capture_output=True, text=True).stdout
+        self.assertEqual(log.strip(), "Adopt Abacus conventions")
+
     def test_add_refuses_uncommitted_changes(self):
         self.abacus("install", "--dev", "--skip-prereqs", "--workspace", str(self.ws))
         r = self.make_repo()

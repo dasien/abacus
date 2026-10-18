@@ -848,7 +848,8 @@ def cmd_add(a):
             die(f"the quick check failed, so every commit would fail: {fast}\npass a --fast-check (and --gate) that "
                 "works in this repository")
         say("the quick check failed, so every commit would fail. Enter commands that work here:")
-        gate, fast = ask_gates(gate, fast)
+        g, f, _ = detect_gates(repo)  # offer what the build files provide, not the commands that just failed
+        gate, fast = ask_gates(g or gate, f or fast)
     else:
         die("the quick check still fails; stopping before anything is adopted")
     # 2. the board
@@ -861,6 +862,11 @@ def cmd_add(a):
               cwd=repo, check=False)
     if out.returncode != 0:
         die((out.stderr or out.stdout).strip())
+    cfg = json.loads(cfg_path.read_text())  # adoption keeps an existing config; apply the commands settled above
+    if (cfg.get("gate"), cfg.get("fast_check")) != (gate, fast):
+        cfg.update(gate=gate, fast_check=fast)
+        cfg_path.write_text(json.dumps(cfg, indent=2) + "\n")
+        say("updated .abacus/config.json with these commands")
     changed = [l.strip() for l in out.stdout.splitlines() if l.strip().startswith(("wrote", "changed"))]
     say(f"adopted Abacus's conventions ({len(changed)} files):")
     print(run(["git", "status", "--short"], cwd=repo, check=False).stdout.rstrip())
