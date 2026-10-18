@@ -19,7 +19,8 @@
 ```
 
 Every box is an ordinary Claude Code session, running in a different role with different context and constraints.
-A **worker** (`coder:<repo>`) writes code inside one repository. The **concierge**, **planner** and **orchestrator**
+A **worker** (`coder:<repo>`, named after the repository's folder in lowercase with hyphens, so `6502 Kernel` is
+`coder:6502-kernel`) writes code inside one repository. The **concierge**, **planner** and **orchestrator**
 coordinate and never write code.
 
 ## How you talk to it

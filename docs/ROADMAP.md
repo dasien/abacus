@@ -55,6 +55,10 @@ a shared Beads remote is set up (`bd dolt push`).
 - **Project `.mcp.json` isn't discovered everywhere.** In the orchestrator's (non-repository) directory Claude Code
   never loaded it, and never asked for approval. The launcher passes the memory server explicitly with
   `--mcp-config`. Sessions you start yourself outside a repository may not have `consult_memory`.
+- **Each bead builds from scratch when the build lives in the source tree.** Every bead runs in its own git worktree,
+  so a build folder inside the repository (CMake's `cmake-build-*`, `build/`) starts cold for each bead. The result
+  is correct, just slower; the heartbeat demo shows the fix for Rust (one shared `target-dir`). A general shared
+  build cache isn't built yet.
 - **Lanes share the machine.** Each lane has its own orchestrator and workers, but gates and pushes from every lane
   take turns on the one machine-wide heavy lock, so parallel lanes finish later than either alone would.
 - **Dispatch checks are deliberately narrow.** One read-only program per check, executed without a shell, from an
