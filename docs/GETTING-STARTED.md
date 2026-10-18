@@ -38,9 +38,13 @@ terminal. Run `abacus doctor` again any time.
 ```sh
 abacus add ~/Source/repos/myCodeRepo
 ```
-It creates the repository's Beads board, works out the test commands from its build files and asks you to confirm
-them, installs Abacus's conventions, shows you the changes and the repository's doctor, registers the worker, and
-asks before committing, pushing and opening the trust prompt. Inside the repository, `abacus doctor` checks it too.
+It creates the repository's Beads board and works out the test commands from its committed build files (Makefile
+`gate`/`test` targets, `package.json`, `Cargo.toml`, `go.mod`, .NET, Python, or CMake presets and CTest), and asks
+you to confirm them; if it finds none, it asks you for them. It runs the quick check once, since every commit will,
+and stops before changing anything if it fails. Then it installs Abacus's conventions, shows you the changes and the
+repository's doctor, asks before committing, registers the worker, and asks before pushing and opening the trust
+prompt. If it stops partway, run it again: it carries on. The worker is named after the folder, in lowercase with
+hyphens (`6502 Kernel` becomes `coder:6502-kernel`). Inside the repository, `abacus doctor` checks it too.
 The demo below shows what a run looks like before you point Abacus at your own code.
 
 ## 4. Create the demo and trust its folders (3 min)

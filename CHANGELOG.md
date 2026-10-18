@@ -4,6 +4,25 @@ One version for all four Abacus repositories (`abacus`, `abacus-standards`, `aba
 Bug fixes bump the patch number, features bump the minor number, and the major number changes only when the
 operator decides it. See [docs/INSTALL.md](docs/INSTALL.md#versions).
 
+## 0.10.3 (2026-10-17)
+Fixes from adding a real CMake project (6502_Kernel, in a folder named `6502 Kernel`) on a fresh machine:
+- **Worker names are safe to type.** The name comes from the folder, in lowercase with anything other than letters,
+  digits and hyphens turned into hyphens. `6502 Kernel` becomes `coder:6502-kernel`, not `coder:6502 kernel`, which
+  the agents' commands and messages would have split in two. `--name` follows the same rule.
+- **No made-up test commands.** When `abacus add` found nothing, it suggested `make test` even with no `test` target.
+  Now it suggests only what the repository's committed build files provide, and otherwise asks with no default. A
+  generated, gitignored `Makefile` (CMake writes one) no longer counts.
+- **CMake projects are detected.** With a test preset in `CMakePresets.json`:
+  `cmake --preset dev && cmake --build --preset dev && ctest --preset dev --output-on-failure`, with the configure
+  and build steps as the quick check. With `enable_testing()` in `CMakeLists.txt`: a `build/` folder (Ninja when
+  installed) and `ctest --test-dir build`.
+- **The quick check is tried before anything changes.** It runs on every commit, starting with the adoption's own,
+  so `abacus add` runs it once first, before creating anything. If it fails, you see why and can enter other
+  commands, and nothing has been created.
+- **A stopped `abacus add` can carry on.** The worker is registered only after the commit, and rerunning `abacus add`
+  continues when the only uncommitted changes are Abacus's own files. It reuses the earlier commands and replaces an
+  earlier registration of the same repository under another name.
+
 ## 0.10.2 (2026-10-16)
 - **The doctor no longer fails every repository after its first background session.** When Claude Code creates a
   session's worktree, it rewrites a relative `core.hooksPath` (`.githooks`, as adoption sets it) to the absolute

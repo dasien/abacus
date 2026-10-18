@@ -550,6 +550,89 @@ class AddRepositoryTest(unittest.TestCase):
         self.assertIn("This repository", d.stdout)
         self.assertIn("ADOPTED", d.stdout)
 
+    def git_repo(self, d, files):
+        d.mkdir(parents=True)
+        g = lambda *a: subprocess.run(["git", *a], cwd=d, check=True, capture_output=True)
+        g("init", "-q", "-b", "main"); g("config", "user.email", "t@example.com"); g("config", "user.name", "t")
+        for name, content in files.items():
+            (d / name).parent.mkdir(parents=True, exist_ok=True)
+            (d / name).write_text(content)
+        g("add", "-A"); g("commit", "-q", "-m", "init")
+        return d
+
+    def test_detects_cmake_presets_and_ctest(self):
+        """0.10.3: dasien/6502_Kernel builds with CMake presets (Ninja) and tests with CTest."""
+        presets = {"version": 2,
+                   "configurePresets": [{"name": "dev", "generator": "Ninja"}, {"name": "release"}],
+                   "buildPresets": [{"name": "dev", "configurePreset": "dev"},
+                                    {"name": "dev-disk", "configurePreset": "dev", "targets": ["disk"]}],
+                   "testPresets": [{"name": "dev", "configurePreset": "dev"}, {"name": "debug"}]}
+        r = self.git_repo(self.t / "k1", {"CMakeLists.txt": "project(k)\n", "CMakePresets.json": json.dumps(presets)})
+        self.assertEqual(self.cli.detect_gates(r)[:2], (
+            "cmake --preset dev && cmake --build --preset dev && ctest --preset dev --output-on-failure",
+            "cmake --preset dev && cmake --build --preset dev"))
+        r = self.git_repo(self.t / "k2", {"CMakeLists.txt": "project(k)\nenable_testing()\n"})
+        gate, fast, _ = self.cli.detect_gates(r)
+        self.assertTrue(gate.startswith("cmake -S . -B build") and gate.endswith(
+            "&& cmake --build build && ctest --test-dir build --output-on-failure"), gate)
+        r = self.git_repo(self.t / "k3", {"CMakeLists.txt": "project(no_tests)\n"})
+        self.assertEqual(self.cli.detect_gates(r), (None, None, None))
+
+    def test_a_generated_gitignored_makefile_is_not_the_repositorys_build(self):
+        """CMake's Makefile generator writes a root Makefile with a `test` target; 6502_Kernel gitignores it."""
+        r = self.git_repo(self.t / "gen", {".gitignore": "Makefile\n", "README.md": "x\n"})
+        (r / "Makefile").write_text("test:\n\ttrue\n")
+        self.assertEqual(self.cli.detect_gates(r), (None, None, None))
+
+    def test_worker_names_are_safe_to_type(self):
+        self.assertEqual(self.cli.worker_name("6502 Kernel"), "6502-kernel")
+        self.assertEqual(self.cli.worker_name("my_repo (old)"), "my-repo-old")
+        with self.assertRaises(SystemExit):
+            self.cli.worker_name("!!!")
+
+    def fleet(self):
+        return json.loads((self.t / ".abacus" / "fleet.json").read_text())["workers"]
+
+    def test_add_names_a_spaced_folder_safely(self):
+        self.abacus("install", "--dev", "--skip-prereqs", "--workspace", str(self.ws))
+        r = self.make_repo("6502 Kernel")
+        p = self.abacus("add", str(r), "--yes")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("worker name: 6502-kernel", p.stdout)
+        self.assertIn("coder:6502-kernel", self.fleet())
+
+    def test_a_failing_quick_check_stops_before_anything_is_adopted(self):
+        """0.10.2 accepted `make test` with no test target; the adoption commit then failed."""
+        self.abacus("install", "--dev", "--skip-prereqs", "--workspace", str(self.ws))
+        r = self.make_repo()
+        p = self.abacus("add", str(r), "--yes", "--gate", "make test", "--fast-check", "make test")
+        self.assertNotEqual(p.returncode, 0)
+        self.assertIn("the quick check failed", p.stderr)
+        self.assertFalse((r / ".abacus").exists())
+        self.assertFalse((r / ".beads").exists())                   # nothing created, not even the board
+        self.assertNotIn("coder:mycoderepo", self.fleet())
+
+    def test_a_stopped_add_carries_on_and_replaces_the_old_registration(self):
+        """The 0.10.2 failure left the adoption uncommitted and `coder:6502 kernel` registered."""
+        self.abacus("install", "--dev", "--skip-prereqs", "--workspace", str(self.ws))
+        r = self.make_repo("6502 Kernel")
+        adopt = subprocess.run(["abacus-adopt", "--project", "6502 kernel", "--branch", "main", "--gate", "make gate",
+                                "--fast-check", "make check"], cwd=r, env=dict(self.env, PATH=str(
+                                    self.t / ".abacus" / "bin") + os.pathsep + os.environ["PATH"]),
+                               capture_output=True, text=True)
+        self.assertEqual(adopt.returncode, 0, adopt.stderr)
+        fleet_path = self.t / ".abacus" / "fleet.json"
+        f = json.loads(fleet_path.read_text())
+        f["workers"]["coder:6502 kernel"] = {"repo": str(r), "role": "coder"}
+        fleet_path.write_text(json.dumps(f))
+        p = self.abacus("add", str(r), "--yes")
+        self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
+        self.assertIn("carrying on from the earlier adoption", p.stdout)
+        self.assertIn("coder:6502-kernel", self.fleet())
+        self.assertNotIn("coder:6502 kernel", self.fleet())
+        self.assertEqual(subprocess.run(["git", "status", "--porcelain"], cwd=r, capture_output=True,
+                                        text=True).stdout.strip(), "")
+
     def test_add_refuses_uncommitted_changes(self):
         self.abacus("install", "--dev", "--skip-prereqs", "--workspace", str(self.ws))
         r = self.make_repo()

@@ -653,11 +653,51 @@ def cmd_update(a):
 
 # ------------------------------------------------------------------ add a repository
 
+def committed(repo, name):
+    """The file exists and is part of the repository. A generated, gitignored file (CMake's Makefile, say) isn't
+    the repository's own build: its targets come and go with a local build."""
+    f = repo / name
+    if not f.is_file():
+        return False
+    p = run(["git", "ls-files", "--error-unmatch", "--", name], cwd=repo, check=False)
+    if p.returncode != 0 and "not a git repository" in (p.stderr or "").lower():
+        return True
+    return p.returncode == 0
+
+
+def cmake_gates(repo):
+    """(gate, fast_check, where) for a CMake project with tests, or None."""
+    presets = repo / "CMakePresets.json"
+    if committed(repo, "CMakePresets.json"):
+        try:
+            data = json.loads(presets.read_text())
+        except ValueError:
+            data = {}
+        tests = [t for t in data.get("testPresets", []) if t.get("name") and not t.get("hidden")]
+        if tests:
+            t = next((t for t in tests if t["name"] in ("dev", "default")), tests[0])
+            conf = t.get("configurePreset", t["name"])
+            build = next((b["name"] for b in data.get("buildPresets", []) if b.get("configurePreset") == conf
+                          and not b.get("targets") and not b.get("hidden")), None)
+            build_cmd = f"cmake --build --preset {build}" if build else f"cmake --build --preset {conf}"
+            fast = f"cmake --preset {conf} && {build_cmd}"
+            return f"{fast} && ctest --preset {t['name']} --output-on-failure", fast, \
+                f"CMakePresets.json (test preset {t['name']})"
+    lists = repo / "CMakeLists.txt"
+    if committed(repo, "CMakeLists.txt") and re.search(r"^\s*(enable_testing|include\s*\(\s*CTest)", lists.read_text(),
+                                                         re.M | re.I):
+        gen = " -G Ninja" if shutil.which("ninja") else ""
+        fast = f"cmake -S . -B build{gen} && cmake --build build"
+        return f"{fast} && ctest --test-dir build --output-on-failure", fast, "CMakeLists.txt (CTest)"
+    return None
+
+
 def detect_gates(repo):
-    """(gate, fast_check, where it came from) from the repository's own build files, or (None, None, None)."""
+    """(gate, fast_check, where it came from) from the repository's own committed build files, or (None, None, None).
+    Never a guess: a command is proposed only if the file it relies on says it exists."""
     repo = Path(repo)
     mk = repo / "Makefile"
-    targets = set(re.findall(r"^([A-Za-z0-9_-]+):", mk.read_text(), re.M)) if mk.exists() else set()
+    targets = set(re.findall(r"^([A-Za-z0-9_-]+):", mk.read_text(), re.M)) if committed(repo, "Makefile") else set()
     if "gate" in targets:
         return "make gate", ("make check" if "check" in targets else "make gate"), "Makefile (gate target)"
     pkg = repo / "package.json"
@@ -681,9 +721,40 @@ def detect_gates(repo):
         return "dotnet test", "dotnet build", ".NET solution"
     if any((repo / f).exists() for f in ("pyproject.toml", "setup.cfg", "pytest.ini", "tox.ini")):
         return "python3 -m pytest -q", "python3 -m compileall -q .", "Python project"
+    cm = cmake_gates(repo)
+    if cm:
+        return cm
     if "test" in targets:
         return "make test", ("make check" if "check" in targets else "make test"), "Makefile (test target)"
     return None, None, None
+
+
+def worker_name(raw):
+    """Worker names are what agents type in commands and messages: lowercase letters, digits and hyphens only."""
+    name = re.sub(r"[^a-z0-9-]+", "-", raw.lower()).strip("-")
+    name = re.sub(r"-{2,}", "-", name)
+    if not name:
+        die(f"can't make a worker name from {raw!r}; pass --name with letters, digits or hyphens")
+    return name
+
+
+ADOPTION_PATHS = (".abacus/", ".beads/", ".claude/", ".githooks/", ".mcp.json", ".gitignore", "CLAUDE.md")
+
+
+def only_adoption_changes(repo):
+    """True when every uncommitted change is one abacus-adopt makes: a stopped `abacus add` can carry on."""
+    lines = run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=repo, check=False).stdout.splitlines()
+    paths = [l[3:].split(" -> ")[-1].strip('"') for l in lines if l.strip()]
+    ours = lambda p: any(p == a.rstrip("/") or p.startswith(a) for a in ADOPTION_PATHS)
+    return bool(paths) and all(ours(p) for p in paths)
+
+
+def try_fast_check(repo, fast):
+    """Run the quick check once, as the commit hook will. Returns (ok, output tail)."""
+    say(f"running the quick check once, as every commit will: {fast}")
+    p = subprocess.run(["sh", "-c", fast], cwd=repo, capture_output=True, text=True)
+    out = (p.stdout + p.stderr).strip()
+    return p.returncode == 0, out[-1500:]
 
 
 def default_branch(repo):
@@ -703,6 +774,19 @@ def prompt(question, default):
     return got or default
 
 
+def ask_gates(gate=None, fast=None):
+    """Ask for the two commands, with no invented default: offer only what the repository (or you) already gave."""
+    if not sys.stdin.isatty():
+        die("pass --gate '<full test command>' and --fast-check '<quick check>' (couldn't ask: no terminal)")
+    while True:
+        g = (prompt("full test command, run before every push", gate) if gate else
+             input("abacus: full test command, run before every push: ").strip())
+        if g:
+            break
+    f = prompt("quick check, run on every commit", fast or g)
+    return g, f
+
+
 def cmd_add(a):
     """Bring a repository into Abacus: board, conventions, worker registration, trust. The steps that change your
     repository's controls (the commit) and Claude Code's safety prompt (trust) ask you first."""
@@ -715,9 +799,16 @@ def cmd_add(a):
     repo = Path(top.stdout.strip()).resolve()
     if run(["git", "rev-parse", "HEAD"], cwd=repo, check=False).returncode != 0:
         die(f"{repo} has no commits yet; commit something first")
+    resuming = False
     if run(["git", "status", "--porcelain"], cwd=repo, check=False).stdout.strip():
-        die(f"{repo} has uncommitted changes. Commit or stash them first, so the adoption is a diff you can review.")
-    name = (a.name or repo.name).lower()
+        if not only_adoption_changes(repo):
+            die(f"{repo} has uncommitted changes. Commit or stash them first, so the adoption is a diff you can "
+                "review.")
+        resuming = True  # an earlier `abacus add` stopped after adopting; carry on from there
+    raw = a.name or repo.name
+    name = worker_name(raw)
+    if name != raw.lower():
+        say(f"worker name: {name} (from {raw!r}; agents type it in commands, so no spaces or symbols)")
     key = f"coder:{name}"
     fleet_path = HOME / "fleet.json"
     fleet = json.loads(fleet_path.read_text()) if fleet_path.exists() else {"workers": {}}
@@ -725,26 +816,46 @@ def cmd_add(a):
     if known and Path(os.path.expanduser(known.get("repo", ""))).resolve() != repo:
         die(f"{key} is already registered for {known['repo']}; pass --name to choose another worker name")
     branch = default_branch(repo)
-    say(f"adding {repo} as {key} (default branch {branch})")
+    say(f"adding {repo} as {key} (default branch {branch})" + (", carrying on from the earlier adoption"
+                                                                  if resuming else ""))
 
-    # 1. the board
-    if not (repo / ".beads").is_dir():
-        prefix = a.prefix or re.sub(r"[^a-z0-9]", "", name)[:8] or "work"
-        bd(repo, "init", "--prefix", prefix, "--quiet", "--skip-agents", "--skip-hooks", "--non-interactive")
-        say(f"created its Beads board (bead ids will look like {prefix}-abc)")
-    # 2. the gates: what must pass before every push, and on every commit
+    # 1. the gates: what must pass before every push, and on every commit. Settled (and the quick check tried)
+    #    before anything is created, so a failure leaves the repository as it was
     gate, fast = a.gate, a.fast_check
+    cfg_path = repo / ".abacus" / "config.json"
+    if resuming and not gate and cfg_path.exists():
+        cfg = json.loads(cfg_path.read_text())
+        gate, fast = cfg.get("gate"), fast or cfg.get("fast_check")
+        say(f"using the earlier adoption's commands: gate `{gate}`; quick check `{fast}`")
     if not gate:
         g, f, where = detect_gates(repo)
         if g:
             say(f"from {where}: gate (before every push) `{g}`; fast check (every commit) `{f}`")
             if ask("Use these?", a.yes):
                 gate, fast = g, f
+        else:
+            say("no test command found in the repository's build files")
         if not gate:
-            if not sys.stdin.isatty():
-                die("pass --gate '<full test command>' and --fast-check '<quick check>' (couldn't ask: no terminal)")
-            gate = prompt("full test command, run before every push", g or "make test")
-    fast = fast or prompt("quick check, run on every commit", gate)
+            gate, fast = ask_gates(g, f)
+    fast = fast or gate
+    # the quick check runs on every commit, starting with the adoption's own: prove it works before adopting
+    for attempt in range(3):
+        ok, out = try_fast_check(repo, fast)
+        if ok:
+            break
+        print(out)
+        if not sys.stdin.isatty():
+            die(f"the quick check failed, so every commit would fail: {fast}\npass a --fast-check (and --gate) that "
+                "works in this repository")
+        say("the quick check failed, so every commit would fail. Enter commands that work here:")
+        gate, fast = ask_gates(gate, fast)
+    else:
+        die("the quick check still fails; stopping before anything is adopted")
+    # 2. the board
+    if not (repo / ".beads").is_dir():
+        prefix = a.prefix or re.sub(r"[^a-z0-9]", "", name)[:8] or "work"
+        bd(repo, "init", "--prefix", prefix, "--quiet", "--skip-agents", "--skip-hooks", "--non-interactive")
+        say(f"created its Beads board (bead ids will look like {prefix}-abc)")
     # 3. the conventions (abacus-adopt narrows or refuses a .gitignore that would hide its files)
     out = run(["abacus-adopt", "--project", name, "--branch", branch, "--gate", gate, "--fast-check", fast],
               cwd=repo, check=False)
@@ -762,17 +873,7 @@ def cmd_add(a):
         print(f"  {r}")
     if any(r.startswith("NOT ADOPTED") and " emit " in f" {r} " for r in others):
         print("  (emit is expected until the first retro lands)")
-    # 5. register the worker, so the agents can dispatch to it
-    fleet["workers"][key] = {"repo": str(repo), "role": "coder", "model": "sonnet", "permission_mode": "auto",
-                             "prompt": f"You are {key}, an Abacus worker. Run /abacus-worker and wait for dispatches."}
-    fleet_path.write_text(json.dumps(fleet, indent=2) + "\n")
-    dep = run(["abacus-deploy"] + (["--allow-unpublished"] if config().get("dev") else []), check=False)
-    if dep.returncode != 0:
-        die(f"registered {key} but the deploy failed: {(dep.stderr or dep.stdout).strip()}")
-    say(f"registered {key}; the orchestrator can now dispatch work to it")
-    if not any(repo == Path(r) or Path(r) in repo.parents for r in workspace_roots()):
-        say("it's outside your workspace roots; it's still fenced, because every fleet repository is")
-    # 6. commit (it changes the controls that govern agents in this repository, so it's your call)
+    # 5. commit (it changes the controls that govern agents in this repository, so it's your call)
     if ask(f"Commit the adoption in {repo.name} (guards, workflows, skills, config)?", a.yes):
         run(["git", "add", "-A"], cwd=repo)
         c = run(["git", "commit", "-q", "-m", "Adopt Abacus conventions"], cwd=repo, check=False)
@@ -784,7 +885,22 @@ def cmd_add(a):
             p = run(["git", "push", "-q", "origin", branch], cwd=repo, check=False)
             say("pushed" if p.returncode == 0 else f"the push failed:\n{(p.stderr or p.stdout).strip()[-1500:]}")
     else:
-        say("left uncommitted: review `git diff`, then commit it yourself")
+        say("left uncommitted: review `git diff`, then commit it yourself (or rerun `abacus add` to carry on)")
+    # 6. register the worker, so the agents can dispatch to it: only now, so a stopped add leaves no worker behind
+    stale = [k for k, w in fleet["workers"].items() if k != key and k.startswith("coder:")
+             and Path(os.path.expanduser(w.get("repo", ""))).resolve() == repo]
+    for k in stale:  # e.g. 0.10.2 registered "coder:6502 kernel" before its commit failed
+        del fleet["workers"][k]
+        say(f"replaced the earlier registration {k!r} with {key}")
+    fleet["workers"][key] = {"repo": str(repo), "role": "coder", "model": "sonnet", "permission_mode": "auto",
+                             "prompt": f"You are {key}, an Abacus worker. Run /abacus-worker and wait for dispatches."}
+    fleet_path.write_text(json.dumps(fleet, indent=2) + "\n")
+    dep = run(["abacus-deploy"] + (["--allow-unpublished"] if config().get("dev") else []), check=False)
+    if dep.returncode != 0:
+        die(f"registered {key} but the deploy failed: {(dep.stderr or dep.stdout).strip()}")
+    say(f"registered {key}; the orchestrator can now dispatch work to it")
+    if not any(repo == Path(r) or Path(r) in repo.parents for r in workspace_roots()):
+        say("it's outside your workspace roots; it's still fenced, because every fleet repository is")
     # 7. trust: Claude Code's safety prompt, which only you can accept
     pending = untrusted([repo] + [f for f in abacus_folders() if f != repo]) or []
     if repo in pending and ask(f"Open Claude Code in {repo.name} now to trust it? (accept, then /exit)"):
@@ -1501,7 +1617,7 @@ def main(argv=None):
     ad.add_argument("path", nargs="?", default=".")
     ad.add_argument("--gate", help="full test command, run before every push (detected if omitted)")
     ad.add_argument("--fast-check", help="quick check, run on every commit")
-    ad.add_argument("--name", help="worker name (default: the folder name, lowercased)")
+    ad.add_argument("--name", help="worker name (default: the folder name, lowercased, spaces and symbols as hyphens)")
     ad.add_argument("--prefix", help="bead id prefix for a new board")
     ad.add_argument("--yes", action="store_true", help="accept the detected gates, the commit and the push")
     d = sub.add_parser("demo").add_subparsers(dest="demo_cmd", required=True)
